@@ -1,0 +1,25 @@
+# picamera2 and libcamera are installed via apt in the Dockerfile,
+# not pip, because they depend on system-level shared libraries.
+
+flask==3.1.0
+gunicorn==23.0.0
+
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# AWS S3
+boto3==1.35.0
+
+# GPIO — the code uses lgpio directly (installed via apt in the Dockerfile).
+# gpiozero's lgpio pin factory had issues inside Docker on the Pi 5, so it was dropped.
+# Never use RPi.GPIO on Pi 5 — it does not support the new GPIO subsystem.
+
+# DHT22 temperature and humidity sensor
+adafruit-circuitpython-dht==4.0.4
+
+# Pillow is used by the stub camera to generate test frames
+Pillow==11.0.0
+
+# timezone data for zoneinfo (Africa/Johannesburg) - not always present in slim images
+tzdata==2024.2

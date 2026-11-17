@@ -1,0 +1,56 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homesec
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  app:
+    build: ./app
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/homesec
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      SNAPSHOT_DIR: /data/snapshots
+      LGPIO_CHIP: "0"
+      # tells adafruit-blinka to use the raspberry pi gpio backend
+      BLINKA_RASPBERRY_PI: "1"
+    volumes:
+      - ./snapshots:/data/snapshots
+      - ./backup:/data/backup
+    networks:
+      - backend
+
+  nginx:
+    build: ./nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      # binds to Tailscale IP only — if BIND_IP is missing from .env,
+      # defaults to 127.0.0.1 so the port is not exposed publicly
+      - "${BIND_IP:-127.0.0.1}:443:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/htpasswd:/etc/nginx/.htpasswd:ro
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  db-data:

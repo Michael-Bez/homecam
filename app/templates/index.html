@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>homecam</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: monospace; background: #111; color: #ddd; margin: 0; padding: 1rem; }
+    h1 { color: #0f0; margin: 0; }
+    h2 { color: #aaa; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 1.2rem 0 0.4rem; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+    img#stream { max-width: 100%; border: 1px solid #333; display: block; }
+
+    /*  mode buttons */
+    .mode-bar { display: flex; gap: 0.4rem; }
+    .mode-btn { background: #1a1a1a; border: 1px solid #444; color: #aaa; padding: 0.4rem 0.9rem; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 0.85rem; }
+    .mode-btn:hover { border-color: #888; color: #fff; }
+    .mode-btn.active { border-color: #0f0; color: #0f0; }
+
+    /* status cards */
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
+    .card { background: #1a1a1a; border: 1px solid #333; padding: 0.6rem 0.8rem; border-radius: 4px; }
+    .card .label { font-size: 0.68rem; color: #666; }
+    .card .value { font-size: 1rem; color: #eee; margin-top: 0.2rem; }
+    .ok { color: #0f0; } .offline { color: #f44; } .idle { color: #888; }
+
+    /* collapsible sections for Alert / Manual modes */
+    .section { background: #161616; border: 1px solid #2a2a2a; border-radius: 4px; padding: 0.7rem 1rem; margin-top: 0.8rem; }
+    .section label { color: #888; font-size: 0.8rem; margin-right: 0.4rem; }
+    input[type="time"] { background: #222; border: 1px solid #444; color: #ddd; padding: 0.3rem 0.5rem; font-family: monospace; border-radius: 3px; }
+
+    /* buttons */
+    .btn { background: #1a1a1a; border: 1px solid #444; color: #ccc; padding: 0.35rem 0.8rem; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 0.85rem; }
+    .btn:hover { border-color: #888; color: #fff; }
+    .btn.on  { border-color: #0f0; color: #0f0; }
+    .btn.red { border-color: #f44; color: #f44; }
+    .btn-snap { border-color: #08f; color: #08f; margin-left: 1rem; }
+    .btn-snap:hover { border-color: #4af; color: #4af; }
+
+    /* events table */
+    table { border-collapse: collapse; width: 100%; font-size: 0.83rem; margin-top: 0.5rem; }
+    th { text-align: left; color: #555; padding: 0.3rem 0.5rem; border-bottom: 1px solid #2a2a2a; }
+    td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #1a1a1a; }
+    .tick { color: #0f0; } .pending { color: #fa0; }
+    .kind-manual { color: #08f; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>homecam</h1>
+  <div class="mode-bar">
+    <button class="mode-btn" data-mode="Stealth" onclick="setMode('Stealth')">Stealth</button>
+    <button class="mode-btn" data-mode="Alert"   onclick="setMode('Alert')">Alert</button>
+    <button class="mode-btn" data-mode="Manual"  onclick="setMode('Manual')">Manual</button>
+  </div>
+</div>
+
+<img id="stream" src="/stream" alt="Camera feed" onerror="this.alt='Stream unavailable'">
+
+<h2>Status</h2>
+<div class="status-grid">
+  <div class="card"><div class="label">Temperature</div><div class="value" id="temp">—</div></div>
+  <div class="card"><div class="label">Humidity</div><div class="value" id="humidity">—</div></div>
+  <div class="card"><div class="label">Last motion</div><div class="value" id="last-motion">—</div></div>
+  <div class="card"><div class="label">Motion count</div><div class="value" id="motion-count">0</div></div>
+  <div class="card"><div class="label">Uploader</div><div class="value" id="uploader-status">—</div></div>
+  <div class="card"><div class="label">Upload queue</div><div class="value" id="queue-depth">0</div></div>
+</div>
+
+<!-- shown  only in Alert mode -->
+<div class="section" id="alert-section" style="display:none">
+  <strong style="color:#fa0">Alert mode — armed hours</strong>
+  <div style="margin-top:0.5rem">
+    <label>From</label>
+    <input type="time" id="sched-start" value="22:00">
+    <label style="margin-left:0.6rem">To</label>
+    <input type="time" id="sched-end" value="06:00">
+    <button class="btn" style="margin-left:0.6rem" onclick="saveSchedule()">Save</button>
+    <span id="sched-saved" style="color:#0f0;margin-left:0.5rem;font-size:0.8rem;display:none">Saved</span>
+  </div>
+  <div style="font-size:0.75rem;color:#555;margin-top:0.4rem">Outside these hours motion is logged but no alarm triggers.</div>
+</div>
+
+<!-- shown only in Manual mode -->
+<div class="section" id="manual-section" style="display:none">
+  <strong style="color:#08f">Manual mode controls</strong>
+  <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+    <span style="color:#888;font-size:0.8rem">Red LED</span>
+    <button class="btn" id="btn-red-on"  onclick="setLed('red', true)">ON</button>
+    <button class="btn" id="btn-red-off" onclick="setLed('red', false)">OFF</button>
+    <span style="color:#888;font-size:0.8rem;margin-left:0.8rem">Green LED</span>
+    <button class="btn" id="btn-grn-on"  onclick="setLed('green', true)">ON</button>
+    <button class="btn" id="btn-grn-off" onclick="setLed('green', false)">OFF</button>
+    <button class="btn btn-snap" id="snap-btn" onclick="takeSnapshot()">Take Snapshot</button>
+  </div>
+</div>
+
+<h2>Recent events</h2>
+<table>
+  <thead>
+    <tr><th>Time</th><th>Type</th><th>Snapshot</th><th>S3</th></tr>
+  </thead>
+  <tbody id="events-body">
+    <tr><td colspan="4" style="color:#555">Loading…</td></tr>
+  </tbody>
+</table>
+
+<script>
+  async function updateState() {
+    try {
+      const s = await fetch('/api/state').then(r => r.json());
+
+      document.getElementById('temp').textContent     = s.temperature != null ? s.temperature + ' °C' : '—';
+      document.getElementById('humidity').textContent = s.humidity    != null ? s.humidity    + ' %'  : '—';
+      document.getElementById('last-motion').textContent = s.last_motion ? new Date(s.last_motion).toLocaleString() : 'none';
+      document.getElementById('motion-count').textContent = s.motion_count;
+
+      const upEl = document.getElementById('uploader-status');
+      upEl.textContent = s.uploader_status;
+      upEl.className = 'value ' + s.uploader_status;
+
+      document.getElementById('queue-depth').textContent = s.upload_queue_depth;
+
+      // highlighht the active mode button
+      document.querySelectorAll('.mode-btn').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.mode === s.mode)
+      );
+
+      // show/hide mode-specific sections
+      document.getElementById('alert-section').style.display  = s.mode === 'Alert'  ? 'block' : 'none';
+      document.getElementById('manual-section').style.display = s.mode === 'Manual' ? 'block' : 'none';
+
+      // fill schedule inputs (only if not currently focused by user)
+      if (document.activeElement.id !== 'sched-start')
+        document.getElementById('sched-start').value = s.schedule_start;
+      if (document.activeElement.id !== 'sched-end')
+        document.getElementById('sched-end').value   = s.schedule_end;
+
+      // highlight led buttons to show current state
+      document.getElementById('btn-red-on').classList.toggle('red', s.led_red);
+      document.getElementById('btn-red-off').classList.toggle('on', !s.led_red);
+      document.getElementById('btn-grn-on').classList.toggle('on', s.led_green);
+      document.getElementById('btn-grn-off').classList.toggle('on', !s.led_green);
+
+    } catch (e) {}
+  }
+
+  async function updateEvents() {
+    try {
+      const events = await fetch('/api/events?limit=25').then(r => r.json());
+      const tbody = document.getElementById('events-body');
+      if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:#555">No events yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = events.map(e => `
+        <tr>
+          <td>${new Date(e.ts).toLocaleString()}</td>
+          <td class="${e.kind === 'manual' ? 'kind-manual' : ''}">${e.kind}</td>
+          <td style="color:#555;font-size:0.75rem">${e.snapshot ?? '—'}</td>
+          <td class="${e.s3_uploaded ? 'tick' : 'pending'}">${e.s3_uploaded ? '✓' : '…'}</td>
+        </tr>
+      `).join('');
+    } catch (e) {}
+  }
+
+  async function setMode(mode) {
+    await fetch('/api/mode', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode})
+    });
+    await updateState();
+  }
+
+  async function saveSchedule() {
+    const start = document.getElementById('sched-start').value;
+    const end   = document.getElementById('sched-end').value;
+    await fetch('/api/schedule', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({start, end})
+    });
+    const saved = document.getElementById('sched-saved');
+    saved.style.display = 'inline';
+    setTimeout(() => saved.style.display = 'none', 2000);
+  }
+
+  async function setLed(color, on) {
+    await fetch('/api/led', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({color, on})
+    });
+    await updateState();
+  }
+
+  async function takeSnapshot() {
+    const btn = document.getElementById('snap-btn');
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+    try {
+      await fetch('/api/snapshot', {method: 'POST'});
+      btn.textContent = 'Done!';
+      await updateEvents();
+    } catch (e) {
+      btn.textContent = 'Error';
+    }
+    setTimeout(() => { btn.textContent = 'Take Snapshot'; btn.disabled = false; }, 2000);
+  }
+
+  updateState();
+  updateEvents();
+  setInterval(updateState,  3000);
+  setInterval(updateEvents, 5000);
+</script>
+
+</body>
+</html>

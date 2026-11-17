@@ -1,0 +1,14 @@
+# Pi-specific hardware additions. Always used together with docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# kept separate so the hardware access (privileged, udev) is clearly in one place
+# instead of mixed in with the general service config.
+
+services:
+  app:
+    privileged: true           # gives access to all host devices (camera pipeline + GPIO)
+    volumes:
+      - /run/udev:/run/udev:ro # libcamera still needs udev for device discovery
+      - ./snapshots:/data/snapshots
+      - ./backup:/data/backup
+    ipc: host

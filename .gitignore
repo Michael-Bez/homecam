@@ -1,0 +1,12 @@
+.env
+.env.local
+*.pem
+*.key
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+snapshots/
+backup/
+nginx/certs/
+nginx/htpasswd
